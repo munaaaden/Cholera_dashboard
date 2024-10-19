@@ -1,0 +1,357 @@
+---
+title: "WHO Data : Worldwide Cholera Outbreak 2006 -2016 "
+format: dashboard
+theme: morph
+---
+
+```{r}
+# Load packages 
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(tidyverse, outbreaks, bslib, bsicons, shiny, 
+                plotly, htmltools, reactable, flexdashboard, gapminder, here,janitor,sf,gganimate, countrycode, scales, RColorBrewer, viridis, ggpmisc)
+
+library(rgeoboundaries)
+library(rnaturalearth)
+
+```
+
+
+```{r}
+#Import datasets
+Cholera_Cases <- read_csv(here("datasets/CHOLERA_0000000001.csv"))
+Cholera_Deaths <- read_csv(here("datasets/CHOLERA_0000000002.csv"))
+Cholera_CaseFatality <- read_csv(here("datasets/CHOLERA_0000000003.csv"))
+Wash <- read_csv(here("datasets/WSH_WATER_SAFELY_MANAGED,WSH_WATER_BASIC.csv"))
+Sanitation <- read_csv(here("datasets/WSH_SANITATION_SAFELY_MANAGED,WSH_SANITATION_BASIC.csv"))
+Open_defecation<- read_csv(here("datasets/WSH_SANITATION_OD.csv"))
+Handwashing<- read_csv(here("datasets/WSH_Handwashing.csv"))
+Cholera_Cases_4Kenya <- read_csv(here("datasets/CHOLERA_Cases.csv"))
+Cholera_CF_4Kenya <- read_csv(here("datasets/CHOLERA_Casefatality.csv"))
+```
+
+
+```{r}
+Cholera_Cases <- Cholera_Cases %>% 
+  filter(Year %in% c('2006', '2007', '2008', '2009', '2010', '2011', '2012', '2013', '2014', '2015', '2016')) %>%  
+  rename(country = `Countries, territories and areas`,
+         cases = `Number of reported cases of cholera`)
+
+# Filter and rename the dataset for Kenya
+# Filter and rename the dataset for the specified countries
+Cholera_Cases_4Kenya <- Cholera_Cases_4Kenya %>% 
+  filter(Year %in% as.character(2006:2016)) %>%  # Filter for years 2006 to 2016
+  rename(country = `Countries, territories and areas`,
+         cases = `Number of reported cases of cholera`) %>% 
+  filter(country %in% c("Kenya", "Uganda", "Somalia", "Sudan", 
+                        "United Republic of Tanzania", "Djibouti", 
+                        "Ethiopia", "Rwanda")) # Filter for Kenya
+
+Cholera_CF_4Kenya <- Cholera_CF_4Kenya %>% 
+   filter(Year %in% as.character(2006:2016)) %>%  # Filter for years 2006 to 2016
+  rename(country = `Countries, territories and areas`,
+         CFR = `Cholera case fatality rate`) %>% 
+  filter(country %in% c("Kenya", "Uganda", "Somalia", "Sudan", 
+                        "United Republic of Tanzania", "Djibouti", 
+                        "Ethiopia", "Rwanda"))  
+
+Wash <- Wash %>%  
+  rename(country = `Countries, territories and areas`,
+         percentage_clean_water = `2016 - Population using safely managed drinking-water services (%)`)
+
+
+Sanitation <- Sanitation %>%  
+  rename(country = `Countries, territories and areas`,
+         percentage_sanitation = `2016 - Population using safely managed sanitation services (%)`)
+
+Open_defecation <- Open_defecation %>%  
+  rename(country = `Countries, territories and areas`,
+         percentage_OD = `2016 - Population practising open defecation (%)`)
+
+Handwashing <- Handwashing %>%  
+  rename(country = `Countries, territories and areas`,
+         percentage_handwashing = `2016 - Population with basic handwashing facilities at home (%)`)
+
+
+Cholera_Deaths<- Cholera_Deaths %>% 
+  filter(Year %in% c('2006', '2007', '2008', '2009', '2010', '2011', '2012', '2013', '2014', '2015', '2016')) %>%  
+  rename(country = `Countries, territories and areas`,
+         cases = `Number of reported deaths from cholera`)
+
+
+Cholera_CaseFatality <- Cholera_CaseFatality %>% 
+  filter(Year %in% c('2006', '2007', '2008', '2009', '2010', '2011', '2012', '2013', '2014', '2015', '2016')) %>%  
+  rename(country = `Countries, territories and areas`,
+         cases = `Cholera case fatality rate`)
+
+Cholera_Cases_Wash <- Cholera_Cases %>% 
+  filter(Year %in% c('2016'))
+
+Cholera_Mortality_Sanitation <- Cholera_Deaths %>% 
+  filter(Year %in% c('2016'))
+```
+
+
+# Page 1
+
+## Worldwide Cholera Cases 2006-2016
+
+```{r}
+# Load country shapes
+country_shapes <- rnaturalearth::ne_countries()
+
+# Prepare  data
+Cholera_Cases_Map_data <- Cholera_Cases %>% 
+  mutate(country_code = countrycode(country, "country.name", "iso3c")) %>% 
+  select(country, country_code, Year, cases)
+
+gapmap <- left_join(country_shapes, Cholera_Cases_Map_data , by = c("adm0_a3" = "country_code"))
+
+
+# Create plot
+plot <- plot_geo(gapmap, locationmode = 'ISO-3') %>%
+  add_trace(
+    z = ~cases,
+    locations = ~adm0_a3,  # Use adm0_a3 for the country codes
+    frame = ~Year,
+    color = ~cases,
+    colors = "Blues"  # Optional: color palette
+  ) %>%  # Corrected pipe placement
+  layout(
+    font = list(size = 8),
+    title = "Cholera Cases Over 2006 to 2016"
+  )
+
+# Display the plot
+plot
+
+
+```
+
+# Page 2
+
+## Row 1{height=50%}
+
+### The direct relationship between open defecation and Cholera Cases
+
+```{r}
+# Joining the datasets
+combined_data3 <- left_join(Cholera_Cases_Wash, Open_defecation, by = "country")
+
+# Remove rows with NA values
+combined_data3 <- na.omit(combined_data3)
+
+# Fit the linear model
+lm_model <- lm(cases ~ percentage_OD, data = combined_data3)
+
+# Create a scatter map with a regression line and equation
+scatter_map3 <- ggplot(combined_data3, aes(x = percentage_OD, y = cases, label = country)) +
+  geom_point(aes(size = cases, color = cases), alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +  # Add a linear regression line
+  scale_color_viridis_c() +  # Color scale
+  labs(title = "Cholera Cases vs. Percentage Practising Open Defecation",
+       x = "Percentage Practising Open Defecation",
+       y = "Number of Cholera Cases",
+       size = "Cholera Cases") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Add the regression equation
+scatter_map3 <- scatter_map3 + 
+  annotate("text", x = 40, y = 6500,  # Adjust these values based on your data
+           label = paste("y =", round(coef(lm_model)[1], 2), "+", 
+                         round(coef(lm_model)[2], 2), "x"),
+           color = "black", size = 5, vjust = -1)
+
+# Convert to an interactive plot
+interactive_map3 <- ggplotly(scatter_map3)
+
+# Display the interactive plot
+interactive_map3
+
+```
+
+
+
+
+## Row 2{height=50%}
+
+### The Inverse relationship between Safe Sanitation Services and Deaths from Cholera in 2016
+
+```{r}
+# Joining the datasets
+combined_data1 <- left_join(Cholera_Mortality_Sanitation, Sanitation, by = "country")
+
+combined_data1 <- combined_data1 %>%
+  filter(!is.na(cases) & !is.na(percentage_sanitation)) %>%
+  mutate(cases = as.numeric(cases),  # Ensure cases is numeric
+         percentage_sanitation = as.numeric(percentage_sanitation))  # Ensure percentage is numeric
+
+# Create the scatter map with a regression line
+scatter_map1 <- ggplot(combined_data1, aes(x = cases, y = percentage_sanitation, label = country)) +
+  geom_point(aes(size = cases, color = cases), alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +  # Add a linear regression line
+  scale_color_viridis_c() +  # Color scale
+  labs(title = "Cholera Deaths vs. Percentage Using Safely Managed Sanitation Services",
+       x = "Number of Cholera Deaths",
+       y = "Percentage Using Safely Managed Sanitation Services",
+       size = "Cholera Deaths") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Convert to an interactive plot
+interactive_map1 <- ggplotly(scatter_map1)
+
+# Display the interactive plot
+interactive_map1
+```
+
+
+
+# Page 3
+
+## Row 1{height=50%}
+
+### The inverse relationship between safe drinking  water and Cholera  Cases
+
+```{r}
+# Joining the datasets
+combined_data <- left_join(Cholera_Cases_Wash, Wash, by = "country")
+
+# Filter out the specified countries and remove rows with NA values
+combined_data <- combined_data %>%
+  filter(!country %in% c("United States", 
+                          "Democratic Republic of the Congo", 
+                          "United Republic of Tanzania"),
+         !is.na(cases) & !is.na(percentage_clean_water))  # Remove rows with NA values
+
+# Create the scatter map with a regression line
+scatter_map <- ggplot(combined_data, aes(x = percentage_clean_water, y = cases, label = country)) +
+  geom_point(aes(size = cases, color = cases), alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +  # Add a linear regression line
+  scale_color_viridis_c() +  # Color scale
+  labs(title = "Cholera Cases vs. Percentage Using Safely Managed Drinking water",
+       x = "Percentage Using Safely Managed Drinking water",
+       y = "Number of Cholera Cases",
+       size = "Cholera Cases") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Convert to an interactive plot
+interactive_map <- ggplotly(scatter_map)
+
+# Display the interactive plot
+interactive_map
+
+```
+
+
+
+
+
+
+
+
+## Row 2{height=50%}
+
+### The direct  relationship between Basic Handwashing and Cholera Cases in 2016
+
+```{r}
+# Joining the datasets
+combined_data4 <- left_join(Cholera_Cases_Wash, Handwashing, by = "country")
+
+# Remove rows with NA values
+combined_data4 <- na.omit(combined_data4)
+
+# Fit the linear model
+lm_model1 <- lm(cases ~ percentage_handwashing, data = combined_data4)
+
+# Create a scatter map with a regression line and equation
+scatter_map4 <- ggplot(combined_data4, aes(x = percentage_handwashing, y = cases, label = country)) +
+  geom_point(aes(size = cases, color = cases), alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +  # Add a linear regression line
+  scale_color_viridis_c() +  # Color scale
+  labs(title = "Cholera Cases vs. Percentage Practising Basic Hand Washing",
+       x =  "Percentage Practising Basic Handwashing",
+       y = "Number of Cholera Cases",
+       size = "Cholera Cases") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Add the regression equation
+scatter_map4 <- scatter_map4 + 
+  annotate("text", x = 40, y = 6500,  # Adjust these values based on your data
+           label = paste("y =", round(coef(lm_model1)[1], 2), "+", 
+                         round(coef(lm_model1)[2], 2), "x"),
+           color = "black", size = 5, vjust = -1)
+
+# Convert to an interactive plot
+interactive_map4 <- ggplotly(scatter_map4)
+
+# Display the interactive plot
+interactive_map4
+
+```
+
+
+
+
+# Page 4
+
+## Worldwide Cholera Mortality numbers 2006-2016
+
+```{r}
+
+
+# Ensure CFR is numeric
+Cholera_CF_4Kenya <- Cholera_CF_4Kenya %>%
+  mutate(CFR = as.numeric(CFR))  # Convert CFR to numeric
+
+# Check for any NA values generated during conversion
+if (any(is.na(Cholera_CF_4Kenya$CFR))) {
+  warning("NA values introduced in CFR conversion. Check your data for non-numeric entries.")
+}
+
+# Calculate total case fatality rates (CFR) by country and reorder factor
+total_cases <- Cholera_CF_4Kenya %>%
+  group_by(country) %>%
+  summarise(total_CFR = sum(CFR, na.rm = TRUE)) %>%
+  arrange(desc(total_CFR))
+
+# Reorder country based on total CFR
+Cholera_CF_4Kenya <- Cholera_CF_4Kenya %>%
+  mutate(country = factor(country, levels = total_cases$country))
+
+# Create a line chart with ggplot2
+cholera_cases_plot <- ggplot(Cholera_CF_4Kenya, aes(x = Year, y = CFR, color = country, group = country)) +
+  geom_line(size = 1) +  # Line for CFR
+  geom_point(aes(size = CFR), alpha = 0.7) +  # Bubbles for each year
+  labs(title = "Cholera Case Fatality Rates in East Africa (2006-2016)",
+       x = "Year",
+       y = "Case Fatality Rate (%)",
+       color = "Country",
+       size = "CFR") +
+  theme_minimal()
+
+# Convert to an interactive plot
+interactive_cholera_cases_plot <- ggplotly(cholera_cases_plot)
+
+# Display the interactive plot
+interactive_cholera_cases_plot
+
+
+```
+
+
+# ABOUT
+
+This data comes from the Global Observatory on Health R&D which is a comprehensive source of information and analyses on global health R&D for human diseases. It builds on existing data/reports from a range of sources, and gathers new information to help monitor health R&D and decision-making related to:
+
+health R&D gaps
+priorities for new investments in health R&D
+capacity strengthening needs for health R&D.
+The Observatory continues to use unexploited data sources and information to enhance knowledge and information sharing. It does so by using a coherent approach for tracking and analyzing health R&D across all health categories and across the whole R&D space.
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/bZ68icBOXic?si=2Z5_jzXjEFGW8iht" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+
+
