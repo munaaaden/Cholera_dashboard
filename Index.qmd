@@ -349,6 +349,7 @@ This data comes from the Global Observatory on Health R&D which is a comprehensi
 health R&D gaps
 priorities for new investments in health R&D
 capacity strengthening needs for health R&D.
+
 The Observatory continues to use unexploited data sources and information to enhance knowledge and information sharing. It does so by using a coherent approach for tracking and analyzing health R&D across all health categories and across the whole R&D space.
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/bZ68icBOXic?si=2Z5_jzXjEFGW8iht" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
